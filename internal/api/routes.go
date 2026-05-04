@@ -4,6 +4,7 @@ import "net/http"
 
 func SetupRoutes(h *Handler) *http.ServeMux {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/upload", h.UploadHandler)
+	mux.HandleFunc("POST /", h.UploadHandler)
+	mux.HandleFunc("GET /{id}", h.RetrieveHandler)
 	return mux
 }
