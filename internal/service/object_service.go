@@ -61,3 +61,19 @@ func (s *ObjectService) Upload(ctx context.Context, content io.ReadSeeker, bucke
 
 	return meta, nil
 }
+
+func (s *ObjectService) GetObject(ctx context.Context, id string) (io.ReadCloser, *models.ObjectMetadata, error) {
+	var meta models.ObjectMetadata
+
+	err := s.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&meta)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	stream, err := s.storage.Get(meta.StoragePath)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return stream, &meta, nil
+}
