@@ -2,6 +2,9 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
+	"log"
 	"net/http"
 
 	"github.com/EduardoBacarin/gostorage/internal/service"
@@ -40,4 +43,26 @@ func (h *Handler) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(metadata)
+}
+
+func (h *Handler) RetrieveHandler(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	stream, meta, err := h.objService.GetObject(r.Context(), id)
+	if err != nil {
+		http.Error(w, "Not Found", http.StatusNotFound)
+		return
+	}
+	defer stream.Close()
+
+	w.Header().Set("Content-Type", meta.ContentType)
+
+	if meta.Size > 0 {
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", meta.Size))
+	}
+
+	n, err := io.Copy(w, stream)
+	if err != nil {
+		log.Printf("Streaming error: %v", err)
+	}
+	log.Printf("Sent %d bytes", n)
 }
