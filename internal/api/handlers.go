@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -23,7 +22,7 @@ func (h *Handler) UploadHandler(w http.ResponseWriter, r *http.Request) {
 
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		http.Error(w, "File not found", http.StatusBadRequest)
+		SendJSON(w, http.StatusBadRequest, false, nil, "Invalid file")
 		return
 	}
 	defer file.Close()
@@ -36,20 +35,19 @@ func (h *Handler) UploadHandler(w http.ResponseWriter, r *http.Request) {
 
 	metadata, err := h.objService.Upload(r.Context(), file, bucket, key)
 	if err != nil {
-		http.Error(w, "Erro ao processar upload: "+err.Error(), http.StatusInternalServerError)
+		SendJSON(w, http.StatusInternalServerError, false, nil, err.Error())
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(metadata)
+	data := map[string]string{"id": metadata.ID}
+	SendJSON(w, http.StatusCreated, true, data, "")
 }
 
 func (h *Handler) RetrieveHandler(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	stream, meta, err := h.objService.GetObject(r.Context(), id)
 	if err != nil {
-		http.Error(w, "Not Found", http.StatusNotFound)
+		SendJSON(w, http.StatusNotFound, false, nil, "")
 		return
 	}
 	defer stream.Close()

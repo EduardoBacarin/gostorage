@@ -13,7 +13,7 @@ import (
 func main() {
 	client, err := database.ConnectMongo("mongodb://localhost:27017")
 	if err != nil {
-		log.Fatal("Falha ao conectar no Mongo:", err)
+		log.Fatal("Mongo connection failed:", err)
 	}
 	collection := client.Database("gostorage").Collection("objects")
 
