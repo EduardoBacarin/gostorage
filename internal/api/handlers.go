@@ -64,3 +64,18 @@ func (h *Handler) RetrieveHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("Sent %d bytes", n)
 }
+
+func (h *Handler) DeleteHandler(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		SendJSON(w, http.StatusBadRequest, false, nil, "")
+		return
+	}
+	err := h.objService.DeleteObject(r.Context(), id)
+	if err != nil {
+		SendJSON(w, http.StatusInternalServerError, false, nil, err.Error())
+		return
+	}
+
+	SendJSON(w, http.StatusOK, true, nil, "")
+}
