@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
+	"log"
 	"time"
 
 	"github.com/EduardoBacarin/gostorage/internal/models"
@@ -76,4 +77,25 @@ func (s *ObjectService) GetObject(ctx context.Context, id string) (io.ReadCloser
 	}
 
 	return stream, &meta, nil
+}
+
+func (s *ObjectService) DeleteObject(ctx context.Context, id string) error {
+	var meta models.ObjectMetadata
+
+	err := s.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&meta)
+	if err != nil {
+		return err
+	}
+
+	_, err = s.collection.DeleteOne(ctx, bson.M{"_id": id})
+	if err != nil {
+		return err
+	}
+
+	err = s.storage.Delete(meta.StoragePath)
+	if err != nil {
+		log.Printf("Database register removed but failed on delete file %s: %v", meta.StoragePath, err)
+	}
+
+	return nil
 }
