@@ -15,7 +15,7 @@ func NewLocalStorage(baseDir string) *LocalStorage {
 }
 
 func (l *LocalStorage) Save(id string, data io.Reader) (string, error) {
-	path := filepath.Join(l.BaseDir, id+".dat")
+	path := filepath.Join(l.BaseDir, id)
 
 	file, err := os.Create(path)
 	if err != nil {
