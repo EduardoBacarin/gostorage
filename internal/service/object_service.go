@@ -19,10 +19,10 @@ type ObjectService struct {
 	collection *mongo.Collection
 }
 
-func NewObjectService(s storage.Engine, col *mongo.Collection) *ObjectService {
+func NewObjectService(s storage.Engine, db *mongo.Database) *ObjectService {
 	return &ObjectService{
 		storage:    s,
-		collection: col,
+		collection: db.Collection("objects"),
 	}
 }
 

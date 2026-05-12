@@ -11,17 +11,13 @@ import (
 )
 
 func main() {
-	client, err := database.ConnectMongo("mongodb://localhost:27017")
-	if err != nil {
-		log.Fatal("Mongo connection failed:", err)
-	}
-	collection := client.Database("gostorage").Collection("objects")
+	client, _ := database.ConnectMongo("mongodb://localhost:27017")
+	db := client.Database("gostorage")
 
 	store := storage.NewLocalStorage("./store")
+	services := service.NewServices(db, store)
 
-	objService := service.NewObjectService(store, collection)
-
-	h := api.NewHandler(objService)
+	h := api.NewHandler(db, services)
 
 	router := api.SetupRoutes(h)
 
