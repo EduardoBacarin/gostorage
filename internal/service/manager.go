@@ -1,16 +1,23 @@
 package service
 
 import (
+	"github.com/EduardoBacarin/gostorage/internal/security"
 	"github.com/EduardoBacarin/gostorage/internal/storage"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 type Services struct {
-	Object *ObjectService
+	Object  *ObjectService
+	User    *UserService
+	Session *security.SessionManager
 }
 
-func NewServices(db *mongo.Database, store storage.Engine) *Services {
+func NewServices(db *mongo.Database) *Services {
+	sessionManager := security.NewSessionManager()
+	store := storage.NewLocalStorage("./store")
 	return &Services{
-		Object: NewObjectService(store, db),
+		Session: sessionManager,
+		User:    NewUserService(db, sessionManager),
+		Object:  NewObjectService(store, db),
 	}
 }
