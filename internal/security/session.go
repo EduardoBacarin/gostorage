@@ -68,7 +68,6 @@ func (s *SessionData) HasPermission(required string) bool {
 	return false
 }
 
-// CanAccessBucket verifica se o usuário tem acesso a um bucket específico
 func (s *SessionData) CanAccessBucket(bucketID string) bool {
 	for _, b := range s.Buckets {
 		if b == "*" || b == bucketID {
@@ -76,4 +75,10 @@ func (s *SessionData) CanAccessBucket(bucketID string) bool {
 		}
 	}
 	return false
+}
+
+func (s *SessionManager) DeleteSession(token string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.sessions, token)
 }

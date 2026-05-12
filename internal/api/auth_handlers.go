@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/EduardoBacarin/gostorage/internal/security"
 )
@@ -36,4 +37,10 @@ func (h *Handler) MeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	SendJSON(w, http.StatusOK, true, session, "")
+}
+
+func (h *Handler) LogoutHandler(w http.ResponseWriter, r *http.Request) {
+	token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	h.srv.Session.DeleteSession(token)
+	SendJSON(w, http.StatusOK, true, "", "")
 }
