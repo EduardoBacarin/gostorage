@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"io"
 	"log"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/EduardoBacarin/gostorage/internal/models"
@@ -27,13 +29,13 @@ func NewObjectService(s storage.Engine, db *mongo.Database) *ObjectService {
 	}
 }
 
-func (s *ObjectService) Upload(ctx context.Context, r io.Reader, bucket, key, contentType string) (*models.ObjectMetadata, error) {
-	physicalID := uuid.New().String()
-	hasher := sha256.New()
+func (s *ObjectService) Upload(ctx context.Context, r io.Reader, bucket, key, owner, contentType string) (*models.ObjectMetadata, error) {
+	tempID := uuid.New().String()
 
+	hasher := sha256.New()
 	tee := io.TeeReader(r, hasher)
 
-	storagePath, err := s.storage.Save(physicalID, tee)
+	tempPath, err := s.storage.Save(tempID, tee)
 	if err != nil {
 		return nil, err
 	}
@@ -44,16 +46,24 @@ func (s *ObjectService) Upload(ctx context.Context, r io.Reader, bucket, key, co
 	err = s.collection.FindOne(ctx, bson.M{"checksum": fileHash}).Decode(&existing)
 
 	if err == nil {
-		_ = s.storage.Delete(storagePath)
-		return s.createMetadata(ctx, bucket, key, fileHash, contentType, existing.StoragePath)
+		_ = s.storage.Delete(tempPath)
+		return s.createMetadata(ctx, bucket, key, owner, fileHash, contentType, existing.StoragePath)
 	}
 
-	return s.createMetadata(ctx, bucket, key, fileHash, contentType, storagePath)
+	finalPath := filepath.Join(filepath.Dir(tempPath), fileHash)
+
+	if err := os.Rename(tempPath, finalPath); err != nil {
+		_ = s.storage.Delete(tempPath)
+		return nil, err
+	}
+
+	return s.createMetadata(ctx, bucket, key, owner, fileHash, contentType, finalPath)
 }
 
-func (s *ObjectService) createMetadata(ctx context.Context, bucket, key, hash, contentType, storagePath string) (*models.ObjectMetadata, error) {
+func (s *ObjectService) createMetadata(ctx context.Context, bucket, key, owner, hash, contentType, storagePath string) (*models.ObjectMetadata, error) {
 	meta := &models.ObjectMetadata{
 		ID:          uuid.New().String(),
+		OwnerID:     owner,
 		Checksum:    hash,
 		Bucket:      bucket,
 		Key:         key,

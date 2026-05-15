@@ -12,6 +12,7 @@ type Services struct {
 	Object  *ObjectService
 	User    *UserService
 	Session *security.SessionManager
+	Bucket  *BucketService
 }
 
 func NewServices(db *mongo.Database) *Services {
@@ -25,5 +26,6 @@ func NewServices(db *mongo.Database) *Services {
 		Session: sessionManager,
 		User:    NewUserService(db, sessionManager),
 		Object:  NewObjectService(store, db),
+		Bucket:  NewBucketService(db),
 	}
 }
