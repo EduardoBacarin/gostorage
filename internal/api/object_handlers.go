@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/EduardoBacarin/gostorage/internal/helpers"
 	"github.com/EduardoBacarin/gostorage/internal/security"
 )
 
@@ -16,6 +17,7 @@ func (h *Handler) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	session, _ := r.Context().Value(SessionKey).(security.SessionData)
 	bucket := r.PathValue("bucket")
 	object := r.PathValue("object")
+	log.Println(object, bucket)
 	if bucket == "" || object == "" {
 		SendJSON(w, http.StatusBadRequest, false, nil, "Invalid file or bucket")
 		return
@@ -24,6 +26,12 @@ func (h *Handler) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	maxFileSize, _ := strconv.ParseInt(os.Getenv("MAX_FILE_SIZE"), 10, 64)
 	if r.ContentLength > maxFileSize {
 		SendJSON(w, http.StatusRequestEntityTooLarge, false, nil, "Content exceeds the maximum allowed file size")
+		return
+	}
+
+	findBucket, err := h.srv.Bucket.GetBucket(r.Context(), helpers.GenerateSHA256("bucket", bucket), nil)
+	if err != nil {
+		SendJSON(w, http.StatusNotFound, false, nil, "Bucket not found")
 		return
 	}
 
@@ -40,7 +48,7 @@ func (h *Handler) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	fullStream := io.MultiReader(bytes.NewReader(buffer[:n]), r.Body)
 
-	metadata, err := h.srv.Object.Upload(r.Context(), fullStream, bucket, object, session.UserID, contentType)
+	metadata, err := h.srv.Object.Upload(r.Context(), fullStream, findBucket.Name, object, session.UserID, contentType, r.ContentLength)
 	if err != nil {
 		SendJSON(w, http.StatusInternalServerError, false, nil, err.Error())
 		return

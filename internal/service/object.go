@@ -29,7 +29,7 @@ func NewObjectService(s storage.Engine, db *mongo.Database) *ObjectService {
 	}
 }
 
-func (s *ObjectService) Upload(ctx context.Context, r io.Reader, bucket, key, owner, contentType string) (*models.ObjectMetadata, error) {
+func (s *ObjectService) Upload(ctx context.Context, r io.Reader, bucket, key, owner, contentType string, contentSize int64) (*models.ObjectMetadata, error) {
 	tempID := uuid.New().String()
 
 	hasher := sha256.New()
@@ -47,7 +47,7 @@ func (s *ObjectService) Upload(ctx context.Context, r io.Reader, bucket, key, ow
 
 	if err == nil {
 		_ = s.storage.Delete(tempPath)
-		return s.createMetadata(ctx, bucket, key, owner, fileHash, contentType, existing.StoragePath)
+		return s.createMetadata(ctx, bucket, key, owner, fileHash, contentType, existing.StoragePath, contentSize)
 	}
 
 	finalPath := filepath.Join(filepath.Dir(tempPath), fileHash)
@@ -57,16 +57,17 @@ func (s *ObjectService) Upload(ctx context.Context, r io.Reader, bucket, key, ow
 		return nil, err
 	}
 
-	return s.createMetadata(ctx, bucket, key, owner, fileHash, contentType, finalPath)
+	return s.createMetadata(ctx, bucket, key, owner, fileHash, contentType, finalPath, contentSize)
 }
 
-func (s *ObjectService) createMetadata(ctx context.Context, bucket, key, owner, hash, contentType, storagePath string) (*models.ObjectMetadata, error) {
+func (s *ObjectService) createMetadata(ctx context.Context, bucket, key, owner, hash, contentType, storagePath string, size int64) (*models.ObjectMetadata, error) {
 	meta := &models.ObjectMetadata{
 		ID:          uuid.New().String(),
 		OwnerID:     owner,
 		Checksum:    hash,
 		Bucket:      bucket,
 		Key:         key,
+		Size:        size,
 		ContentType: contentType,
 		StoragePath: storagePath,
 		CreatedAt:   time.Now(),
