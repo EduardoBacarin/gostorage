@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -8,22 +9,27 @@ import (
 )
 
 func (h *Handler) UploadHandler(w http.ResponseWriter, r *http.Request) {
-	r.ParseMultipartForm(10 << 20)
-
-	file, header, err := r.FormFile("file")
-	if err != nil {
-		SendJSON(w, http.StatusBadRequest, false, nil, "Invalid file")
+	bucket := r.PathValue("bucket")
+	object := r.PathValue("object")
+	if bucket == "" || object == "" {
+		SendJSON(w, http.StatusBadRequest, false, nil, "Invalid file or bucket")
 		return
 	}
-	defer file.Close()
 
-	bucket := r.FormValue("bucket")
-	if bucket == "" {
-		bucket = "default"
+	buffer := make([]byte, 512)
+	n, err := r.Body.Read(buffer)
+	if err != nil && err != io.EOF {
+		SendJSON(w, http.StatusInternalServerError, false, nil, "Error reading upload stream")
+		return
 	}
-	key := header.Filename
 
-	metadata, err := h.srv.Object.Upload(r.Context(), file, bucket, key)
+	contentType := "application/octet-stream"
+	if n > 0 {
+		contentType = http.DetectContentType(buffer[:n])
+	}
+	fullStream := io.MultiReader(bytes.NewReader(buffer[:n]), r.Body)
+
+	metadata, err := h.srv.Object.Upload(r.Context(), fullStream, bucket, object, contentType)
 	if err != nil {
 		SendJSON(w, http.StatusInternalServerError, false, nil, err.Error())
 		return
@@ -33,7 +39,7 @@ func (h *Handler) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	SendJSON(w, http.StatusCreated, true, data, "")
 }
 
-func (h *Handler) RetrieveHandler(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetObjectHandler(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	stream, meta, err := h.srv.Object.GetObject(r.Context(), id)
 	if err != nil {

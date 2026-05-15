@@ -10,6 +10,7 @@ import (
 
 	"github.com/EduardoBacarin/gostorage/internal/models"
 	"github.com/EduardoBacarin/gostorage/internal/storage"
+	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
@@ -26,36 +27,42 @@ func NewObjectService(s storage.Engine, db *mongo.Database) *ObjectService {
 	}
 }
 
-func (s *ObjectService) Upload(ctx context.Context, content io.ReadSeeker, bucket, key string) (*models.ObjectMetadata, error) {
-	hash := sha256.New()
-	if _, err := io.Copy(hash, content); err != nil {
-		return nil, err
-	}
-	fileHash := hex.EncodeToString(hash.Sum(nil))
+func (s *ObjectService) Upload(ctx context.Context, r io.Reader, bucket, key, contentType string) (*models.ObjectMetadata, error) {
+	physicalID := uuid.New().String()
+	hasher := sha256.New()
 
-	var existing models.ObjectMetadata
-	err := s.collection.FindOne(ctx, bson.M{"_id": fileHash}).Decode(&existing)
+	tee := io.TeeReader(r, hasher)
 
-	if err == nil {
-		return &existing, nil
-	}
-
-	content.Seek(0, io.SeekStart)
-
-	path, err := s.storage.Save(fileHash, content)
+	storagePath, err := s.storage.Save(physicalID, tee)
 	if err != nil {
 		return nil, err
 	}
 
+	fileHash := hex.EncodeToString(hasher.Sum(nil))
+
+	var existing models.ObjectMetadata
+	err = s.collection.FindOne(ctx, bson.M{"checksum": fileHash}).Decode(&existing)
+
+	if err == nil {
+		_ = s.storage.Delete(storagePath)
+		return s.createMetadata(ctx, bucket, key, fileHash, contentType, existing.StoragePath)
+	}
+
+	return s.createMetadata(ctx, bucket, key, fileHash, contentType, storagePath)
+}
+
+func (s *ObjectService) createMetadata(ctx context.Context, bucket, key, hash, contentType, storagePath string) (*models.ObjectMetadata, error) {
 	meta := &models.ObjectMetadata{
-		ID:          fileHash,
+		ID:          uuid.New().String(),
+		Checksum:    hash,
 		Bucket:      bucket,
 		Key:         key,
-		StoragePath: path,
+		ContentType: contentType,
+		StoragePath: storagePath,
 		CreatedAt:   time.Now(),
 	}
 
-	_, err = s.collection.InsertOne(ctx, meta)
+	_, err := s.collection.InsertOne(ctx, meta)
 	if err != nil {
 		return nil, err
 	}

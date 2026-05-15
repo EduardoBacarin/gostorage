@@ -4,6 +4,7 @@ import "time"
 
 type ObjectMetadata struct {
 	ID          string    `bson:"_id" json:"id"`
+	Checksum    string    `bson:"checksum" json:"checksum"`
 	Bucket      string    `bson:"bucket" json:"bucket"`
 	Key         string    `bson:"key" json:"key"`
 	Size        int64     `bson:"size" json:"size"`
