@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -57,39 +56,32 @@ func (h *Handler) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	SendJSON(w, http.StatusCreated, true, data, "")
 }
 
-func (h *Handler) GetObjectHandler(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) DownloadHandler(w http.ResponseWriter, r *http.Request) {
+	bucket := r.PathValue("bucket")
 	id := r.PathValue("id")
-	stream, meta, err := h.srv.Object.GetObject(r.Context(), id)
-	if err != nil {
-		SendJSON(w, http.StatusNotFound, false, nil, "")
-		return
-	}
-	defer stream.Close()
 
-	w.Header().Set("Content-Type", meta.ContentType)
-
-	if meta.Size > 0 {
-		w.Header().Set("Content-Length", fmt.Sprintf("%d", meta.Size))
-	}
-
-	n, err := io.Copy(w, stream)
-	if err != nil {
-		log.Printf("Streaming error: %v", err)
-	}
-	log.Printf("Sent %d bytes", n)
-}
-
-func (h *Handler) DeleteHandler(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if id == "" {
-		SendJSON(w, http.StatusBadRequest, false, nil, "")
-		return
-	}
-	err := h.srv.Object.DeleteObject(r.Context(), id)
-	if err != nil {
-		SendJSON(w, http.StatusInternalServerError, false, nil, err.Error())
+	if bucket == "" || id == "" {
+		SendJSON(w, http.StatusBadRequest, false, nil, "Invalid bucket or Id")
 		return
 	}
 
-	SendJSON(w, http.StatusOK, true, nil, "")
+	metadata, file, err := h.srv.Object.GetObject(r.Context(), bucket, id)
+	if err != nil {
+		if err.Error() == "Not found" {
+			w.WriteHeader(404)
+			return
+		}
+		w.WriteHeader(500)
+		return
+	}
+	defer file.Close()
+
+	w.Header().Set("Content-Type", metadata.ContentType)
+
+	w.Header().Set("Content-Length", strconv.FormatInt(metadata.Size, 10))
+	w.WriteHeader(http.StatusOK)
+	_, err = io.Copy(w, file)
+	if err != nil {
+		log.Printf("Erro ao transmitir arquivo para o cliente: %v", err)
+	}
 }

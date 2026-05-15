@@ -110,7 +110,6 @@ func (h *Handler) GetBucketHandler(w http.ResponseWriter, r *http.Request) {
 	SendJSON(w, http.StatusOK, true, bucket, "")
 }
 
-// DeleteBucketHandler resolve a rota DELETE /v1/buckets/{id}
 func (h *Handler) DeleteBucketHandler(w http.ResponseWriter, r *http.Request) {
 	session, ok := r.Context().Value(SessionKey).(security.SessionData)
 	if !ok {

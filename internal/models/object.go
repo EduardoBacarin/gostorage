@@ -12,5 +12,4 @@ type ObjectMetadata struct {
 	IsPublic    bool      `bson:"is_public" json:"is_public"`
 	OwnerID     string    `bson:"owner" json:"owner"`
 	CreatedAt   time.Time `bson:"created_at" json:"created_at"`
-	StoragePath string    `bson:"storage_path" json:"storage_path"`
 }

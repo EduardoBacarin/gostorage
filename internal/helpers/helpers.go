@@ -3,6 +3,9 @@ package helpers
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -37,4 +40,31 @@ func Slugify(s string) string {
 	str = strings.Trim(str, "-")
 
 	return str
+}
+
+func GenerateDynamicPath(hash string) (string, error) {
+	envParts := os.Getenv("STORAGE_PARTS")
+	numParts, err := strconv.Atoi(envParts)
+
+	if err != nil || numParts <= 0 {
+		numParts = 2
+	}
+
+	chunkSize := len(hash) / numParts
+
+	if numParts*chunkSize > len(hash) {
+		return "", fmt.Errorf("number of parts exceeds hash length")
+	}
+
+	var paths []string
+
+	for i := 0; i < numParts; i++ {
+		start := i * chunkSize
+		end := start + chunkSize
+		paths = append(paths, hash[start:end])
+	}
+
+	paths = append(paths, hash)
+
+	return filepath.Join(paths...), nil
 }

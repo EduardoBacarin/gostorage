@@ -4,12 +4,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/EduardoBacarin/gostorage/internal/helpers"
 	"github.com/EduardoBacarin/gostorage/internal/models"
 	"github.com/EduardoBacarin/gostorage/internal/storage"
 	"github.com/google/uuid"
@@ -47,20 +48,30 @@ func (s *ObjectService) Upload(ctx context.Context, r io.Reader, bucket, key, ow
 
 	if err == nil {
 		_ = s.storage.Delete(tempPath)
-		return s.createMetadata(ctx, bucket, key, owner, fileHash, contentType, existing.StoragePath, contentSize)
+		return s.createMetadata(ctx, bucket, key, owner, fileHash, contentType, contentSize)
 	}
 
-	finalPath := filepath.Join(filepath.Dir(tempPath), fileHash)
+	subPath, err := helpers.GenerateDynamicPath(fileHash)
+	if err != nil {
+		_ = s.storage.Delete(tempPath)
+		return nil, err
+	}
+	baseDir := filepath.Dir(tempPath)
+	finalPath := filepath.Join(baseDir, subPath)
+	if err := os.MkdirAll(filepath.Dir(finalPath), 0755); err != nil {
+		_ = s.storage.Delete(tempPath)
+		return nil, err
+	}
 
 	if err := os.Rename(tempPath, finalPath); err != nil {
 		_ = s.storage.Delete(tempPath)
 		return nil, err
 	}
 
-	return s.createMetadata(ctx, bucket, key, owner, fileHash, contentType, finalPath, contentSize)
+	return s.createMetadata(ctx, bucket, key, owner, fileHash, contentType, contentSize)
 }
 
-func (s *ObjectService) createMetadata(ctx context.Context, bucket, key, owner, hash, contentType, storagePath string, size int64) (*models.ObjectMetadata, error) {
+func (s *ObjectService) createMetadata(ctx context.Context, bucket, key, owner, hash, contentType string, size int64) (*models.ObjectMetadata, error) {
 	meta := &models.ObjectMetadata{
 		ID:          uuid.New().String(),
 		OwnerID:     owner,
@@ -69,7 +80,6 @@ func (s *ObjectService) createMetadata(ctx context.Context, bucket, key, owner, 
 		Key:         key,
 		Size:        size,
 		ContentType: contentType,
-		StoragePath: storagePath,
 		CreatedAt:   time.Now(),
 	}
 
@@ -81,39 +91,27 @@ func (s *ObjectService) createMetadata(ctx context.Context, bucket, key, owner, 
 	return meta, nil
 }
 
-func (s *ObjectService) GetObject(ctx context.Context, id string) (io.ReadCloser, *models.ObjectMetadata, error) {
-	var meta models.ObjectMetadata
+func (s *ObjectService) GetObject(ctx context.Context, bucket string, id string) (*models.ObjectMetadata, *os.File, error) {
+	var metadata models.ObjectMetadata
+	err := s.collection.FindOne(ctx, bson.M{"bucket": bucket, "_id": id}).Decode(&metadata)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, nil, errors.New("Not found")
+		}
+		return nil, nil, err
+	}
 
-	err := s.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&meta)
+	subPath, err := helpers.GenerateDynamicPath(metadata.Checksum)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	stream, err := s.storage.Get(meta.StoragePath)
+	finalPath := filepath.Join(s.storage.BaseDir(), subPath)
+
+	file, err := os.Open(finalPath)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return stream, &meta, nil
-}
-
-func (s *ObjectService) DeleteObject(ctx context.Context, id string) error {
-	var meta models.ObjectMetadata
-
-	err := s.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&meta)
-	if err != nil {
-		return err
-	}
-
-	_, err = s.collection.DeleteOne(ctx, bson.M{"_id": id})
-	if err != nil {
-		return err
-	}
-
-	err = s.storage.Delete(meta.StoragePath)
-	if err != nil {
-		log.Printf("Database register removed but failed on delete file %s: %v", meta.StoragePath, err)
-	}
-
-	return nil
+	return &metadata, file, nil
 }

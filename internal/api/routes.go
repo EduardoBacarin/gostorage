@@ -18,8 +18,8 @@ func SetupRoutes(h *Handler) *http.ServeMux {
 
 	/* OBJECT */
 	mux.Handle("PUT /{bucket}/{object}", h.AuthMiddleware(http.HandlerFunc(h.UploadHandler)))
-	mux.HandleFunc("GET /{bucket}/{id}", h.GetObjectHandler)
-	mux.HandleFunc("DELETE /v1/object/{id}", h.DeleteHandler)
+	mux.HandleFunc("GET /{bucket}/{id}", h.DownloadHandler)
+	/* mux.HandleFunc("DELETE /v1/object/{id}", h.DeleteHandler) */
 
 	return mux
 }

@@ -7,18 +7,18 @@ import (
 )
 
 type LocalStorage struct {
-	BaseDir string
+	rootPath string
 }
 
 func NewLocalStorage(baseDir string) *LocalStorage {
 	if err := os.MkdirAll(baseDir, 0755); err != nil {
 		panic("failed to create storage base directory: " + err.Error())
 	}
-	return &LocalStorage{BaseDir: baseDir}
+	return &LocalStorage{rootPath: baseDir}
 }
 
 func (l *LocalStorage) Save(id string, data io.Reader) (string, error) {
-	path := filepath.Join(l.BaseDir, id)
+	path := filepath.Join(l.rootPath, id)
 
 	file, err := os.Create(path)
 	if err != nil {
@@ -36,4 +36,8 @@ func (l *LocalStorage) Get(path string) (io.ReadCloser, error) {
 
 func (l *LocalStorage) Delete(path string) error {
 	return os.Remove(path)
+}
+
+func (l *LocalStorage) BaseDir() string {
+	return l.rootPath
 }
