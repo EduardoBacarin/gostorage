@@ -104,3 +104,29 @@ func (s *BucketService) UpdateBucket(ctx context.Context, bucketID string, newNa
 
 	return &currentBucket, nil
 }
+
+func (s *BucketService) GetBucket(ctx context.Context, bucketID string, userID string) (*models.Bucket, error) {
+	var bucket models.Bucket
+	err := s.collection.FindOne(ctx, bson.M{"_id": bucketID}).Decode(&bucket)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, errors.New("Not Found")
+		}
+		return nil, err
+	}
+	return &bucket, nil
+}
+
+func (s *BucketService) DeleteBucket(ctx context.Context, bucketID string, userID string) error {
+	var bucket models.Bucket
+	err := s.collection.FindOne(ctx, bson.M{"_id": bucketID}).Decode(&bucket)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return errors.New("Not Found")
+		}
+		return err
+	}
+
+	_, err = s.collection.DeleteOne(ctx, bson.M{"_id": bucketID})
+	return err
+}

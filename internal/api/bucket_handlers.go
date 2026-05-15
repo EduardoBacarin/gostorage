@@ -82,3 +82,57 @@ func (h *Handler) UpdateBucketHandler(w http.ResponseWriter, r *http.Request) {
 
 	SendJSON(w, http.StatusOK, true, updatedBucket, "")
 }
+
+func (h *Handler) GetBucketHandler(w http.ResponseWriter, r *http.Request) {
+	session, ok := r.Context().Value(SessionKey).(security.SessionData)
+	if !ok {
+		SendJSON(w, http.StatusUnauthorized, false, nil, "Unauthorized")
+		return
+	}
+
+	bucketID := r.PathValue("id")
+	if bucketID == "" {
+		SendJSON(w, http.StatusBadRequest, false, nil, "Invalid bucket ID")
+		return
+	}
+
+	bucket, err := h.srv.Bucket.GetBucket(r.Context(), bucketID, session.UserID)
+	if err != nil {
+		switch err.Error() {
+		case "Not Found":
+			SendJSON(w, http.StatusNotFound, false, nil, err.Error())
+		default:
+			SendJSON(w, http.StatusInternalServerError, false, nil, err.Error())
+		}
+		return
+	}
+
+	SendJSON(w, http.StatusOK, true, bucket, "")
+}
+
+// DeleteBucketHandler resolve a rota DELETE /v1/buckets/{id}
+func (h *Handler) DeleteBucketHandler(w http.ResponseWriter, r *http.Request) {
+	session, ok := r.Context().Value(SessionKey).(security.SessionData)
+	if !ok {
+		SendJSON(w, http.StatusUnauthorized, false, nil, "Unauthorized")
+		return
+	}
+
+	bucketID := r.PathValue("id")
+	if bucketID == "" {
+		SendJSON(w, http.StatusBadRequest, false, nil, "Invalid bucket ID")
+		return
+	}
+
+	err := h.srv.Bucket.DeleteBucket(r.Context(), bucketID, session.UserID)
+	if err != nil {
+		switch err.Error() {
+		case "Not Found":
+			SendJSON(w, http.StatusNotFound, false, nil, err.Error())
+		default:
+			SendJSON(w, http.StatusInternalServerError, false, nil, err.Error())
+		}
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
