@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	"github.com/EduardoBacarin/gostorage/internal/helpers"
@@ -23,7 +22,7 @@ func NewBucketService(db *mongo.Database) *BucketService {
 }
 
 func (s *BucketService) CreateBucket(ctx context.Context, name string, isPublic bool, ownerID string) (*models.Bucket, error) {
-	bucketName := strings.ToLower(strings.TrimSpace(name))
+	bucketName := helpers.Slugify(name)
 	if bucketName == "" {
 		return nil, errors.New("Bucket name cannot be empty")
 	}
@@ -68,7 +67,7 @@ func (s *BucketService) UpdateBucket(ctx context.Context, bucketID string, newNa
 	updateFields := bson.M{}
 
 	if newName != nil {
-		bucketName := strings.ToLower(strings.TrimSpace(*newName))
+		bucketName := helpers.Slugify(*newName)
 		if bucketName == "" {
 			return nil, errors.New("Bucket name cannot be empty")
 		}
@@ -105,7 +104,7 @@ func (s *BucketService) UpdateBucket(ctx context.Context, bucketID string, newNa
 	return &currentBucket, nil
 }
 
-func (s *BucketService) GetBucket(ctx context.Context, bucketID string, userID string) (*models.Bucket, error) {
+func (s *BucketService) GetBucket(ctx context.Context, bucketID string, userID *string) (*models.Bucket, error) {
 	var bucket models.Bucket
 	err := s.collection.FindOne(ctx, bson.M{"_id": bucketID}).Decode(&bucket)
 	if err != nil {
@@ -117,7 +116,7 @@ func (s *BucketService) GetBucket(ctx context.Context, bucketID string, userID s
 	return &bucket, nil
 }
 
-func (s *BucketService) DeleteBucket(ctx context.Context, bucketID string, userID string) error {
+func (s *BucketService) DeleteBucket(ctx context.Context, bucketID string, userID *string) error {
 	var bucket models.Bucket
 	err := s.collection.FindOne(ctx, bson.M{"_id": bucketID}).Decode(&bucket)
 	if err != nil {

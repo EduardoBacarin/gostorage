@@ -96,7 +96,7 @@ func (h *Handler) GetBucketHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	bucket, err := h.srv.Bucket.GetBucket(r.Context(), bucketID, session.UserID)
+	bucket, err := h.srv.Bucket.GetBucket(r.Context(), bucketID, &session.UserID)
 	if err != nil {
 		switch err.Error() {
 		case "Not Found":
@@ -124,7 +124,7 @@ func (h *Handler) DeleteBucketHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := h.srv.Bucket.DeleteBucket(r.Context(), bucketID, session.UserID)
+	err := h.srv.Bucket.DeleteBucket(r.Context(), bucketID, &session.UserID)
 	if err != nil {
 		switch err.Error() {
 		case "Not Found":
