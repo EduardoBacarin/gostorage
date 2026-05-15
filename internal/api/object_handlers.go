@@ -17,7 +17,6 @@ func (h *Handler) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	session, _ := r.Context().Value(SessionKey).(security.SessionData)
 	bucket := r.PathValue("bucket")
 	object := r.PathValue("object")
-	log.Println(object, bucket)
 	if bucket == "" || object == "" {
 		SendJSON(w, http.StatusBadRequest, false, nil, "Invalid file or bucket")
 		return
