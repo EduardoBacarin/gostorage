@@ -11,6 +11,9 @@ type LocalStorage struct {
 }
 
 func NewLocalStorage(baseDir string) *LocalStorage {
+	if err := os.MkdirAll(baseDir, 0755); err != nil {
+		panic("failed to create storage base directory: " + err.Error())
+	}
 	return &LocalStorage{BaseDir: baseDir}
 }
 

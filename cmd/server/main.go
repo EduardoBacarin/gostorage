@@ -6,17 +6,35 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/EduardoBacarin/gostorage/internal/api"
 	"github.com/EduardoBacarin/gostorage/internal/database"
 	"github.com/EduardoBacarin/gostorage/internal/service"
+	"github.com/joho/godotenv"
 )
 
 func main() {
 	setupMode := flag.Bool("setup", false, "Execute the first start setup")
 	flag.Parse()
-	client, _ := database.ConnectMongo("mongodb://localhost:27017")
-	db := client.Database("gostorage")
+	if err := godotenv.Load(); err != nil {
+		log.Fatal(".env File not Found")
+	}
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080" // Valor padrão caso não esteja no .env
+	}
+	mongoURI := os.Getenv("MONGO_URI")
+	dbName := os.Getenv("MONGO_DB_NAME")
+	if mongoURI == "" || dbName == "" {
+		log.Fatal("MONGO_URI and MONGO_DB_NAME are required")
+	}
+
+	client, err := database.ConnectMongo(mongoURI)
+	if err != nil {
+		log.Fatal("MongoDB connection failed:", err)
+	}
+	db := client.Database(dbName)
 
 	services := service.NewServices(db)
 
@@ -53,8 +71,8 @@ func main() {
 	h := api.NewHandler(db, services)
 	router := api.SetupRoutes(h)
 
-	log.Println("Server started at port 8080")
-	if err := http.ListenAndServe(":8080", router); err != nil {
+	log.Printf("Server started at port %s", port)
+	if err := http.ListenAndServe(":"+port, router); err != nil {
 		log.Fatal(err)
 	}
 }
