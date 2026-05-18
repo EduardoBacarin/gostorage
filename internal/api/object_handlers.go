@@ -57,6 +57,7 @@ func (h *Handler) UploadHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) DownloadHandler(w http.ResponseWriter, r *http.Request) {
+	session, _ := r.Context().Value(SessionKey).(security.SessionData)
 	bucket := r.PathValue("bucket")
 	id := r.PathValue("id")
 
@@ -65,10 +66,14 @@ func (h *Handler) DownloadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	metadata, file, err := h.srv.Object.GetObject(r.Context(), bucket, id)
+	metadata, file, err := h.srv.Object.GetObject(r.Context(), bucket, id, session.UserID)
 	if err != nil {
 		if err.Error() == "Not found" {
 			w.WriteHeader(404)
+			return
+		}
+		if err.Error() == "Unauthorized" {
+			w.WriteHeader(403)
 			return
 		}
 		w.WriteHeader(500)

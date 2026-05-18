@@ -39,11 +39,11 @@ func (s *BucketService) CreateBucket(ctx context.Context, name string, isPublic 
 	}
 
 	newBucket := &models.Bucket{
-		ID:        helpers.GenerateSHA256("bucket", bucketName),
-		Name:      bucketName,
-		Public:    isPublic,
-		OwnerID:   ownerID,
-		CreatedAt: time.Now(),
+		ID:          helpers.GenerateSHA256("bucket", bucketName),
+		Name:        bucketName,
+		AllowPublic: isPublic,
+		OwnerID:     ownerID,
+		CreatedAt:   time.Now(),
 	}
 
 	_, err = s.collection.InsertOne(ctx, newBucket)
@@ -88,7 +88,7 @@ func (s *BucketService) UpdateBucket(ctx context.Context, bucketID string, newNa
 
 	if isPublic != nil {
 		updateFields["public"] = *isPublic
-		currentBucket.Public = *isPublic // atualiza para o retorno
+		currentBucket.AllowPublic = *isPublic // atualiza para o retorno
 	}
 
 	if len(updateFields) == 0 {

@@ -19,14 +19,16 @@ import (
 )
 
 type ObjectService struct {
-	storage    storage.Engine
-	collection *mongo.Collection
+	storage          storage.Engine
+	collection       *mongo.Collection
+	bucketCollection *mongo.Collection
 }
 
 func NewObjectService(s storage.Engine, db *mongo.Database) *ObjectService {
 	return &ObjectService{
-		storage:    s,
-		collection: db.Collection("objects"),
+		storage:          s,
+		collection:       db.Collection("objects"),
+		bucketCollection: db.Collection("buckets"),
 	}
 }
 
@@ -91,9 +93,17 @@ func (s *ObjectService) createMetadata(ctx context.Context, bucket, key, owner, 
 	return meta, nil
 }
 
-func (s *ObjectService) GetObject(ctx context.Context, bucket string, id string) (*models.ObjectMetadata, *os.File, error) {
-	var metadata models.ObjectMetadata
-	err := s.collection.FindOne(ctx, bson.M{"bucket": bucket, "_id": id}).Decode(&metadata)
+func (s *ObjectService) GetObject(ctx context.Context, bucketName string, id string, requesterId string) (*models.ObjectMetadata, *os.File, error) {
+
+	var bucket models.Bucket
+	err := s.bucketCollection.FindOne(ctx, bson.M{"name": bucketName}).Decode(&bucket)
+
+	if err != nil {
+		return nil, nil, errors.New("Not found")
+	}
+
+	var object models.ObjectMetadata
+	err = s.collection.FindOne(ctx, bson.M{"bucket": bucketName, "_id": id}).Decode(&object)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, nil, errors.New("Not found")
@@ -101,17 +111,25 @@ func (s *ObjectService) GetObject(ctx context.Context, bucket string, id string)
 		return nil, nil, err
 	}
 
-	subPath, err := helpers.GenerateDynamicPath(metadata.Checksum)
+	if object.IsPublic && bucket.AllowPublic {
+		return s.openFileAndReturn(&object)
+	}
+
+	if requesterId == "" {
+		return nil, nil, errors.New("Unauthorized")
+	}
+	return s.openFileAndReturn(&object)
+}
+
+func (s *ObjectService) openFileAndReturn(meta *models.ObjectMetadata) (*models.ObjectMetadata, *os.File, error) {
+	subPath, err := helpers.GenerateDynamicPath(meta.Checksum)
 	if err != nil {
 		return nil, nil, err
 	}
-
 	finalPath := filepath.Join(s.storage.BaseDir(), subPath)
-
 	file, err := os.Open(finalPath)
 	if err != nil {
 		return nil, nil, err
 	}
-
-	return &metadata, file, nil
+	return meta, file, nil
 }
