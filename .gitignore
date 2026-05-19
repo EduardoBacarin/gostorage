@@ -32,4 +32,8 @@ go.work.sum
 # .vscode/
 
 store/*
+storage/*
 test/*
+
+.air.toml
+tmp/*

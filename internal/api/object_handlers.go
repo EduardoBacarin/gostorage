@@ -1,29 +1,58 @@
 package api
 
 import (
-	"fmt"
+	"bytes"
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"strconv"
+
+	"github.com/EduardoBacarin/gostorage/internal/helpers"
+	"github.com/EduardoBacarin/gostorage/internal/security"
 )
 
-func (h *Handler) UploadHandler(w http.ResponseWriter, r *http.Request) {
-	r.ParseMultipartForm(10 << 20)
-
-	file, header, err := r.FormFile("file")
-	if err != nil {
-		SendJSON(w, http.StatusBadRequest, false, nil, "Invalid file")
+func (h *Handler) UploadObjectHandler(w http.ResponseWriter, r *http.Request) {
+	session, _ := r.Context().Value(SessionKey).(security.SessionData)
+	bucket := r.PathValue("bucket")
+	object := r.PathValue("object")
+	if bucket == "" || object == "" {
+		SendJSON(w, http.StatusBadRequest, false, nil, "Invalid file or bucket")
 		return
 	}
-	defer file.Close()
 
-	bucket := r.FormValue("bucket")
-	if bucket == "" {
-		bucket = "default"
+	maxFileSize, _ := strconv.ParseInt(os.Getenv("MAX_FILE_SIZE"), 10, 64)
+	if r.ContentLength > maxFileSize {
+		SendJSON(w, http.StatusRequestEntityTooLarge, false, nil, "Content exceeds the maximum allowed file size")
+		return
 	}
-	key := header.Filename
 
-	metadata, err := h.srv.Object.Upload(r.Context(), file, bucket, key)
+	err := h.srv.Object.ValidateBucketPermission(r.Context(), helpers.GenerateSHA256("bucket", bucket), session.Buckets)
+	if err != nil {
+		SendJSON(w, http.StatusForbidden, false, nil, "Forbidden")
+		return
+	}
+
+	_, err = h.srv.Bucket.GetBucket(r.Context(), helpers.GenerateSHA256("bucket", bucket), nil)
+	if err != nil {
+		SendJSON(w, http.StatusNotFound, false, nil, "Bucket not found")
+		return
+	}
+
+	buffer := make([]byte, 512)
+	n, err := r.Body.Read(buffer)
+	if err != nil && err != io.EOF {
+		SendJSON(w, http.StatusInternalServerError, false, nil, "Error reading upload stream")
+		return
+	}
+
+	contentType := "application/octet-stream"
+	if n > 0 {
+		contentType = http.DetectContentType(buffer[:n])
+	}
+	fullStream := io.MultiReader(bytes.NewReader(buffer[:n]), r.Body)
+
+	metadata, err := h.srv.Object.Upload(r.Context(), fullStream, helpers.GenerateSHA256("bucket", bucket), object, session.UserID, contentType, r.ContentLength)
 	if err != nil {
 		SendJSON(w, http.StatusInternalServerError, false, nil, err.Error())
 		return
@@ -33,37 +62,62 @@ func (h *Handler) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	SendJSON(w, http.StatusCreated, true, data, "")
 }
 
-func (h *Handler) RetrieveHandler(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) DownloadObjectHandler(w http.ResponseWriter, r *http.Request) {
+	session, _ := r.Context().Value(SessionKey).(security.SessionData)
+	bucket := r.PathValue("bucket")
 	id := r.PathValue("id")
-	stream, meta, err := h.srv.Object.GetObject(r.Context(), id)
-	if err != nil {
-		SendJSON(w, http.StatusNotFound, false, nil, "")
+
+	if bucket == "" || id == "" {
+		SendJSON(w, http.StatusBadRequest, false, nil, "Invalid bucket or Id")
 		return
 	}
-	defer stream.Close()
 
-	w.Header().Set("Content-Type", meta.ContentType)
-
-	if meta.Size > 0 {
-		w.Header().Set("Content-Length", fmt.Sprintf("%d", meta.Size))
-	}
-
-	n, err := io.Copy(w, stream)
+	metadata, file, err := h.srv.Object.GetObject(r.Context(), helpers.GenerateSHA256("bucket", bucket), id, session.Buckets)
 	if err != nil {
-		log.Printf("Streaming error: %v", err)
+		if err.Error() == "Unauthorized" {
+			w.WriteHeader(401)
+			return
+		}
+		if err.Error() == "Forbidden" {
+			w.WriteHeader(403)
+			return
+		}
+		if err.Error() == "Not found" {
+			w.WriteHeader(404)
+			return
+		}
+		w.WriteHeader(500)
+		return
 	}
-	log.Printf("Sent %d bytes", n)
+	defer file.Close()
+
+	w.Header().Set("Content-Type", metadata.ContentType)
+
+	w.Header().Set("Content-Length", strconv.FormatInt(metadata.Size, 10))
+	w.WriteHeader(http.StatusOK)
+	_, err = io.Copy(w, file)
+	if err != nil {
+		log.Printf("[WARNING] Error on file streaming: %v", err)
+	}
 }
 
-func (h *Handler) DeleteHandler(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) DeleteObjectHandler(w http.ResponseWriter, r *http.Request) {
+
+	session, _ := r.Context().Value(SessionKey).(security.SessionData)
+	bucket := r.PathValue("bucket")
 	id := r.PathValue("id")
-	if id == "" {
-		SendJSON(w, http.StatusBadRequest, false, nil, "")
-		return
-	}
-	err := h.srv.Object.DeleteObject(r.Context(), id)
+
+	err := h.srv.Object.DeleteObject(r.Context(), bucket, id, session.Buckets)
 	if err != nil {
-		SendJSON(w, http.StatusInternalServerError, false, nil, err.Error())
+		if err.Error() == "Forbidden" {
+			SendJSON(w, http.StatusForbidden, false, nil, "Forbidden")
+			return
+		}
+		if err.Error() == "Not found" {
+			SendJSON(w, http.StatusNotFound, false, nil, "Not Found")
+			return
+		}
+		SendJSON(w, http.StatusInternalServerError, false, nil, "Internal error")
 		return
 	}
 
