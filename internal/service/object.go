@@ -93,7 +93,7 @@ func (s *ObjectService) createMetadata(ctx context.Context, bucket, key, owner, 
 	return meta, nil
 }
 
-func (s *ObjectService) GetObject(ctx context.Context, bucketName string, id string, requesterId string) (*models.ObjectMetadata, *os.File, error) {
+func (s *ObjectService) GetObject(ctx context.Context, bucketName string, id string, allowedBuckets []string) (*models.ObjectMetadata, *os.File, error) {
 
 	var bucket models.Bucket
 	err := s.bucketCollection.FindOne(ctx, bson.M{"name": bucketName}).Decode(&bucket)
@@ -115,8 +115,16 @@ func (s *ObjectService) GetObject(ctx context.Context, bucketName string, id str
 		return s.openFileAndReturn(&object)
 	}
 
-	if requesterId == "" {
-		return nil, nil, errors.New("Unauthorized")
+	hasPermission := false
+	for _, allowed := range allowedBuckets {
+		if allowed == "*" || allowed == bucketName {
+			hasPermission = true
+			break
+		}
+	}
+
+	if !hasPermission {
+		return nil, nil, errors.New("Forbidden")
 	}
 	return s.openFileAndReturn(&object)
 }
@@ -132,4 +140,29 @@ func (s *ObjectService) openFileAndReturn(meta *models.ObjectMetadata) (*models.
 		return nil, nil, err
 	}
 	return meta, file, nil
+}
+
+func (s *ObjectService) ValidateBucketPermission(ctx context.Context, bucketName string, allowedBuckets []string) error {
+	if len(allowedBuckets) == 0 {
+		return errors.New("Forbidden")
+	}
+
+	hasPermission := false
+
+	for _, allowed := range allowedBuckets {
+		if allowed == "*" {
+			hasPermission = true
+			break
+		}
+		if allowed == bucketName {
+			hasPermission = true
+			break
+		}
+	}
+
+	if !hasPermission {
+		return errors.New("Forbidden")
+	}
+
+	return nil
 }

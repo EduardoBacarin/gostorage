@@ -27,6 +27,12 @@ func (h *Handler) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	err := h.srv.Object.ValidateBucketPermission(r.Context(), helpers.GenerateSHA256("bucket", bucket), session.Buckets)
+	if err != nil {
+		SendJSON(w, http.StatusForbidden, false, nil, "Forbidden")
+		return
+	}
+
 	findBucket, err := h.srv.Bucket.GetBucket(r.Context(), helpers.GenerateSHA256("bucket", bucket), nil)
 	if err != nil {
 		SendJSON(w, http.StatusNotFound, false, nil, "Bucket not found")
@@ -66,14 +72,18 @@ func (h *Handler) DownloadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	metadata, file, err := h.srv.Object.GetObject(r.Context(), bucket, id, session.UserID)
+	metadata, file, err := h.srv.Object.GetObject(r.Context(), bucket, id, session.Buckets)
 	if err != nil {
-		if err.Error() == "Not found" {
-			w.WriteHeader(404)
+		if err.Error() == "Unauthorized" {
+			w.WriteHeader(401)
 			return
 		}
-		if err.Error() == "Unauthorized" {
+		if err.Error() == "Forbidden" {
 			w.WriteHeader(403)
+			return
+		}
+		if err.Error() == "Not found" {
+			w.WriteHeader(404)
 			return
 		}
 		w.WriteHeader(500)
