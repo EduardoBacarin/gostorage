@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -93,17 +94,17 @@ func (s *ObjectService) createMetadata(ctx context.Context, bucket, key, owner, 
 	return meta, nil
 }
 
-func (s *ObjectService) GetObject(ctx context.Context, bucketName string, id string, allowedBuckets []string) (*models.ObjectMetadata, *os.File, error) {
+func (s *ObjectService) GetObject(ctx context.Context, bucketId string, id string, allowedBuckets []string) (*models.ObjectMetadata, *os.File, error) {
 
 	var bucket models.Bucket
-	err := s.bucketCollection.FindOne(ctx, bson.M{"name": bucketName}).Decode(&bucket)
+	err := s.bucketCollection.FindOne(ctx, bson.M{"name": bucketId}).Decode(&bucket)
 
 	if err != nil {
 		return nil, nil, errors.New("Not found")
 	}
 
 	var object models.ObjectMetadata
-	err = s.collection.FindOne(ctx, bson.M{"bucket": bucketName, "_id": id}).Decode(&object)
+	err = s.collection.FindOne(ctx, bson.M{"bucket": bucketId, "_id": id}).Decode(&object)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, nil, errors.New("Not found")
@@ -115,17 +116,11 @@ func (s *ObjectService) GetObject(ctx context.Context, bucketName string, id str
 		return s.openFileAndReturn(&object)
 	}
 
-	hasPermission := false
-	for _, allowed := range allowedBuckets {
-		if allowed == "*" || allowed == bucketName {
-			hasPermission = true
-			break
-		}
+	err = s.ValidateBucketPermission(ctx, bucketId, allowedBuckets)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	if !hasPermission {
-		return nil, nil, errors.New("Forbidden")
-	}
 	return s.openFileAndReturn(&object)
 }
 
@@ -162,6 +157,49 @@ func (s *ObjectService) ValidateBucketPermission(ctx context.Context, bucketName
 
 	if !hasPermission {
 		return errors.New("Forbidden")
+	}
+
+	return nil
+}
+
+func (s *ObjectService) DeleteObject(ctx context.Context, bucketName string, id string, allowedBuckets []string) error {
+
+	bucketId := helpers.GenerateSHA256("bucket", bucketName)
+	err := s.ValidateBucketPermission(ctx, bucketId, allowedBuckets)
+	if err != nil {
+		return err
+	}
+
+	var object models.ObjectMetadata
+	err = s.collection.FindOne(ctx, bson.M{"bucket": bucketId, "_id": id}).Decode(&object)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return errors.New("Not found")
+		}
+		return err
+	}
+
+	_, err = s.collection.DeleteOne(ctx, bson.M{"bucket": bucketId, "_id": id})
+	if err != nil {
+		return err
+	}
+
+	count, err := s.collection.CountDocuments(ctx, bson.M{"checksum": object.Checksum})
+	if err != nil {
+		return err
+	}
+
+	if count == 0 {
+		subPath, err := helpers.GenerateDynamicPath(object.Checksum)
+		if err != nil {
+			return err
+		}
+
+		finalPath := filepath.Join(s.storage.BaseDir(), subPath)
+
+		if err := s.storage.Delete(finalPath); err != nil {
+			log.Printf("[WARNING] Fails to remove file from storage %s: %v", finalPath, err)
+		}
 	}
 
 	return nil

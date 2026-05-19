@@ -12,7 +12,7 @@ import (
 	"github.com/EduardoBacarin/gostorage/internal/security"
 )
 
-func (h *Handler) UploadHandler(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) UploadObjectHandler(w http.ResponseWriter, r *http.Request) {
 	session, _ := r.Context().Value(SessionKey).(security.SessionData)
 	bucket := r.PathValue("bucket")
 	object := r.PathValue("object")
@@ -33,7 +33,7 @@ func (h *Handler) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	findBucket, err := h.srv.Bucket.GetBucket(r.Context(), helpers.GenerateSHA256("bucket", bucket), nil)
+	_, err = h.srv.Bucket.GetBucket(r.Context(), helpers.GenerateSHA256("bucket", bucket), nil)
 	if err != nil {
 		SendJSON(w, http.StatusNotFound, false, nil, "Bucket not found")
 		return
@@ -52,7 +52,7 @@ func (h *Handler) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	fullStream := io.MultiReader(bytes.NewReader(buffer[:n]), r.Body)
 
-	metadata, err := h.srv.Object.Upload(r.Context(), fullStream, findBucket.Name, object, session.UserID, contentType, r.ContentLength)
+	metadata, err := h.srv.Object.Upload(r.Context(), fullStream, helpers.GenerateSHA256("bucket", bucket), object, session.UserID, contentType, r.ContentLength)
 	if err != nil {
 		SendJSON(w, http.StatusInternalServerError, false, nil, err.Error())
 		return
@@ -62,7 +62,7 @@ func (h *Handler) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	SendJSON(w, http.StatusCreated, true, data, "")
 }
 
-func (h *Handler) DownloadHandler(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) DownloadObjectHandler(w http.ResponseWriter, r *http.Request) {
 	session, _ := r.Context().Value(SessionKey).(security.SessionData)
 	bucket := r.PathValue("bucket")
 	id := r.PathValue("id")
@@ -72,7 +72,7 @@ func (h *Handler) DownloadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	metadata, file, err := h.srv.Object.GetObject(r.Context(), bucket, id, session.Buckets)
+	metadata, file, err := h.srv.Object.GetObject(r.Context(), helpers.GenerateSHA256("bucket", bucket), id, session.Buckets)
 	if err != nil {
 		if err.Error() == "Unauthorized" {
 			w.WriteHeader(401)
@@ -97,6 +97,29 @@ func (h *Handler) DownloadHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, err = io.Copy(w, file)
 	if err != nil {
-		log.Printf("Erro ao transmitir arquivo para o cliente: %v", err)
+		log.Printf("[WARNING] Error on file streaming: %v", err)
 	}
+}
+
+func (h *Handler) DeleteObjectHandler(w http.ResponseWriter, r *http.Request) {
+
+	session, _ := r.Context().Value(SessionKey).(security.SessionData)
+	bucket := r.PathValue("bucket")
+	id := r.PathValue("id")
+
+	err := h.srv.Object.DeleteObject(r.Context(), bucket, id, session.Buckets)
+	if err != nil {
+		if err.Error() == "Forbidden" {
+			SendJSON(w, http.StatusForbidden, false, nil, "Forbidden")
+			return
+		}
+		if err.Error() == "Not found" {
+			SendJSON(w, http.StatusNotFound, false, nil, "Not Found")
+			return
+		}
+		SendJSON(w, http.StatusInternalServerError, false, nil, "Internal error")
+		return
+	}
+
+	SendJSON(w, http.StatusOK, true, nil, "")
 }
