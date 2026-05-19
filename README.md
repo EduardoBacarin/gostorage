@@ -7,13 +7,23 @@ You can use as you want, but it is for **STUDY PURPOSES**, I do not recommend us
 ## Features ##
 
 + IAM
-+ Policies
++ Public and Private Objects and Buckets
 + Presigned URLs
 + Bucket Isolation
 + Data streaming
 + Auto Content-type
 + Checksum Validation
-+ Soft delete
 + Metadata
 + Rate Limiter
 + Smart Deduplication
+
+
+Ready:
+
++ IAM
++ Public and Private Objects and Buckets
++ Smart Deduplication
++ Bucket Isolation
++ Data streaming
++ Auto Content-type
++ Checksum Validation
