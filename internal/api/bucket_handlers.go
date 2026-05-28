@@ -135,8 +135,8 @@ func (h *Handler) ListBucketHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	sortBy := r.URL.Query().Get("sort_by")
-	sortDir := r.URL.Query().Get("sort_dir")
+	sortBy := strings.ToLower(r.URL.Query().Get("sort_by"))
+	sortDir := strings.ToLower(r.URL.Query().Get("sort_dir"))
 	search := strings.TrimSpace(r.URL.Query().Get("search"))
 
 	listBuckets, err := h.srv.Bucket.ListBuckets(r.Context(), page, limit, sortBy, sortDir, search, session.Buckets)
