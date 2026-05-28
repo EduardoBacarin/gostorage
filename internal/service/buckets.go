@@ -9,6 +9,7 @@ import (
 	"github.com/EduardoBacarin/gostorage/internal/models"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 type BucketService struct {
@@ -114,6 +115,71 @@ func (s *BucketService) GetBucket(ctx context.Context, bucketID string, userID *
 		return nil, err
 	}
 	return &bucket, nil
+}
+
+func (s *BucketService) ListBuckets(ctx context.Context, page, limit int64, sortBy, sortDir, search string, allowedBuckets []string) (*helpers.PaginatedResult[models.Bucket], error) {
+	filter := bson.M{}
+	if sortBy == "" {
+		sortBy = "created_at"
+	}
+	switch sortBy {
+	case "name", "created_at":
+	default:
+		sortBy = "created_at"
+	}
+
+	sortOrder := -1
+	if sortDir == "asc" {
+		sortOrder = 1
+	}
+
+	hasSuperUser := false
+	for _, allowed := range allowedBuckets {
+		if allowed == "*" {
+			hasSuperUser = true
+			break
+		}
+	}
+
+	if !hasSuperUser {
+		if len(allowedBuckets) == 0 {
+			return helpers.NewPaginatedResult([]models.Bucket{}, 0, page, limit), nil
+		}
+		filter["_id"] = bson.M{"$in": allowedBuckets}
+	}
+
+	if search != "" {
+		regexFilter := bson.M{"$regex": search, "$options": "i"}
+		filter["$or"] = []bson.M{
+			{"name": regexFilter},
+			{"_id": regexFilter},
+		}
+	}
+
+	total, err := s.collection.CountDocuments(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	pagConfig := helpers.PreparePagination(page, limit)
+
+	findOptions := options.Find()
+	findOptions.SetLimit(pagConfig.Limit)
+	findOptions.SetSkip(pagConfig.Skip)
+	findOptions.SetSort(bson.M{sortBy: sortOrder})
+
+	cursor, err := s.collection.Find(ctx, filter, findOptions)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var buckets []models.Bucket
+	if err = cursor.All(ctx, &buckets); err != nil {
+		return nil, err
+	}
+
+	return helpers.NewPaginatedResult(buckets, total, page, pagConfig.Limit), nil
 }
 
 func (s *BucketService) DeleteBucket(ctx context.Context, bucketID string, userID *string) error {

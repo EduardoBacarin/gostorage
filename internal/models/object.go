@@ -1,6 +1,8 @@
 package models
 
-import "time"
+import (
+	"time"
+)
 
 type ObjectMetadata struct {
 	ID          string    `bson:"_id" json:"id"`

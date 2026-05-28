@@ -3,6 +3,8 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/EduardoBacarin/gostorage/internal/security"
 )
@@ -108,6 +110,47 @@ func (h *Handler) GetBucketHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	SendJSON(w, http.StatusOK, true, bucket, "")
+}
+
+func (h *Handler) ListBucketHandler(w http.ResponseWriter, r *http.Request) {
+	session, ok := r.Context().Value(SessionKey).(security.SessionData)
+	if !ok {
+		SendJSON(w, http.StatusUnauthorized, false, nil, "Unauthorized")
+		return
+	}
+	pageStr := r.URL.Query().Get("page")
+	var page int64 = 1
+	if pageStr != "" {
+		parsedPage, err := strconv.ParseInt(pageStr, 10, 64)
+		if err == nil {
+			page = parsedPage
+		}
+	}
+	limitStr := r.URL.Query().Get("limit")
+	var limit int64 = 10
+	if limitStr != "" {
+		parsedLimit, err := strconv.ParseInt(limitStr, 10, 64)
+		if err == nil {
+			limit = parsedLimit
+		}
+	}
+
+	sortBy := r.URL.Query().Get("sort_by")
+	sortDir := r.URL.Query().Get("sort_dir")
+	search := strings.TrimSpace(r.URL.Query().Get("search"))
+
+	listBuckets, err := h.srv.Bucket.ListBuckets(r.Context(), page, limit, sortBy, sortDir, search, session.Buckets)
+	if err != nil {
+		switch err.Error() {
+		case "Not Found":
+			SendJSON(w, http.StatusNotFound, false, nil, err.Error())
+		default:
+			SendJSON(w, http.StatusInternalServerError, false, nil, err.Error())
+		}
+		return
+	}
+
+	SendJSON(w, http.StatusOK, true, listBuckets, "")
 }
 
 func (h *Handler) DeleteBucketHandler(w http.ResponseWriter, r *http.Request) {
